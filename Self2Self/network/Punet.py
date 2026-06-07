@@ -148,16 +148,10 @@ def build_denoising_unet(noisy_tensor, keep_prob, is_realnoisy, alpha, beta, gam
     data_loss = mask_loss(output_y_m, noisy_tensor, 1. - mask_tensor)
     l_gc = tf.reduce_mean(tf.abs(output_y - output_y_m))
     
-    # Explicit edge loss to match gradients of the original image
-    dy_out, dx_out = tf.image.image_gradients(output_y_m)
     dy_in, dx_in = tf.image.image_gradients(noisy_tensor)
     
-    # Use input gradient magnitude to weight the edge preservation, ignoring flat regions (noise)
+    # Use input gradient magnitude to weight flat regions (noise) for energy loss
     mag_in = tf.sqrt(tf.square(dy_in) + tf.square(dx_in) + 1e-8)
-    # Threshold or power can be applied, e.g. square the magnitude to heavily favor strong edges
-    edge_weight = tf.square(mag_in) 
-    
-    l_edge = tf.reduce_mean(edge_weight * (tf.abs(dy_out - dy_in) + tf.abs(dx_out - dx_in)))
     
     # feature_map_y_m is NCHW. E_i,j = log(sum exp) over channels.
     energy_map = tf.reduce_logsumexp(feature_map_y_m, axis=1) # Shape: (1, H', W')
@@ -172,7 +166,7 @@ def build_denoising_unet(noisy_tensor, keep_prob, is_realnoisy, alpha, beta, gam
     flat_weight = tf.exp(-10.0 * mag_in_resized)
     l_energy = tf.reduce_mean(flat_weight * (1.0 / (tf.abs(energy_map) + 1e-8)))
     
-    total_loss = data_loss + alpha * l_gc + beta * l_energy + gamma * l_edge
+    total_loss = data_loss + alpha * l_gc + beta * l_energy
     
     output_y_m = data_arg(output_y_m, is_flip_lr, is_flip_ud)
     
